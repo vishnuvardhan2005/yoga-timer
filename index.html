@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Yoga Timer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f2f2f2;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #timer-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #timer-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 28px;
+            color: #333;
+        }
+        input {
+            margin: 10px;
+            padding: 8px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            margin: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="timer-container">
+    <canvas id="main-timer-canvas" width="300" height="300"></canvas>
+    <canvas id="short-timer-canvas" width="300" height="300"></canvas>
+    <div id="timer-text">60:00</div>
+</div>
+
+<!-- User Inputs for Time Settings -->
+<input type="number" id="total-time-input" placeholder="Total time (minutes)" value="60">
+<input type="number" id="short-time-input" placeholder="Short interval time (minutes)" value="5">
+<input type="number" id="break-time-input" placeholder="Break time (minutes)" value="2">
+
+<button id="start-btn">Start Timer</button>
+<button id="reset-btn">Reset Timer</button>
+
+<audio id="beep-sound" src="https://www.soundjay.com/button/beep-07.wav" preload="auto"></audio>
+<audio id="alarm-sound" src="https://www.soundjay.com/button/beep-08b.wav" preload="auto"></audio>
+
+<script>
+    const mainCanvas = document.getElementById('main-timer-canvas');
+    const mainCtx = mainCanvas.getContext('2d');
+    const shortCanvas = document.getElementById('short-timer-canvas');
+    const shortCtx = shortCanvas.getContext('2d');
+    const radius = mainCanvas.width / 2;
+
+    let totalTime = 60 * 60;  // Default total time in seconds
+    let shortTime = 5 * 60;   // Default short timer (interval) in seconds
+    let breakTime = 2 * 60;   // Default break time in seconds
+    let currentTotalTime = totalTime;
+    let currentShortTime = shortTime;
+    let timerInterval;
+    let inBreak = false;      // Track whether we are in the break period
+
+    const beepSound = document.getElementById('beep-sound');
+    const alarmSound = document.getElementById('alarm-sound');
+
+    // Helper to draw bar lines along a circle
+    function drawBarLines(ctx, radius, numLines, color, width) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+
+        for (let i = 0; i < numLines; i++) {
+            let angle = (i / numLines) * 2 * Math.PI;
+            let startX = radius + (radius - 10) * Math.cos(angle);
+            let startY = radius + (radius - 10) * Math.sin(angle);
+            let endX = radius + (radius - 30) * Math.cos(angle);
+            let endY = radius + (radius - 30) * Math.sin(angle);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+        }
+    }
+
+    // Draw the main timer (orange outer circle)
+    function drawMainTimer() {
+        mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+        // Draw the outer bar lines for the main timer
+        drawBarLines(mainCtx, radius, 60, '#000000', 4);  // Orange bar lines
+
+        // Draw the progress bar
+        const mainEndAngle = ((totalTime - currentTotalTime) / totalTime) * 2 * Math.PI;
+        mainCtx.beginPath();
+        mainCtx.arc(radius, radius, radius - 20, -Math.PI / 2, mainEndAngle - Math.PI / 2, false);
+        mainCtx.strokeStyle = '#ffa500';  // Orange color
+        mainCtx.lineWidth = 20;
+        mainCtx.stroke();
+    }
+
+    // Draw the short timer (green or blue inner circle)
+    function drawShortTimer() {
+        shortCtx.clearRect(0, 0, shortCanvas.width, shortCanvas.height);
+
+        // Draw the inner bar lines for the short timer
+        // drawBarLines(shortCtx, radius, 30, inBreak ? '#3498db' : '#2ecc71', 3);  // Blue for break, green for short timer
+
+        // Draw the short timer's progress
+        const shortEndAngle = ((inBreak ? breakTime : shortTime) - currentShortTime) / (inBreak ? breakTime : shortTime) * 2 * Math.PI;
+        shortCtx.beginPath();
+        shortCtx.arc(radius, radius, radius - 40, -Math.PI / 2, shortEndAngle - Math.PI / 2, false);
+        shortCtx.strokeStyle = inBreak ? '#3498db' : '#2ecc71';  // Blue for break, green for short timer
+        shortCtx.lineWidth = 6;
+        shortCtx.stroke();
+    }
+
+    function updateTimerText() {
+        const minutes = Math.floor(currentTotalTime / 60);
+        const seconds = currentTotalTime % 60;
+        document.getElementById('timer-text').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    }
+
+    function startTimer() {
+        if (timerInterval) return;
+
+        resetTimer()
+        timerInterval = setInterval(() => {
+            currentTotalTime--;
+            currentShortTime--;
+
+            if (currentTotalTime <= 0) {
+                clearInterval(timerInterval);
+                alarmSound.play();
+                alert('Time is up!');
+            } else if (currentShortTime <= 0) {
+                beepSound.play();
+                if (inBreak) {
+                    currentShortTime = shortTime;  // Reset to short time after break
+                } else {
+                    currentShortTime = breakTime;  // Switch to break after interval
+                }
+                inBreak = !inBreak;  // Toggle between break and short timer
+            }
+
+            updateTimerText();
+            drawMainTimer();
+            drawShortTimer();
+        }, 1000);
+    }
+
+    function resetTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        inBreak = false;
+
+        // Reset to user-defined values
+        totalTime = parseInt(document.getElementById('total-time-input').value) * 60;
+        shortTime = parseInt(document.getElementById('short-time-input').value) * 60;
+        breakTime = parseInt(document.getElementById('break-time-input').value) * 60;
+
+        currentTotalTime = totalTime;
+        currentShortTime = shortTime;
+
+        updateTimerText();
+        drawMainTimer();
+        drawShortTimer();
+    }
+
+    document.getElementById('start-btn').addEventListener('click', startTimer);
+    document.getElementById('reset-btn').addEventListener('click', resetTimer);
+
+    // Initial rendering
+    resetTimer();
+</script>
+
+</body>
+</html>
